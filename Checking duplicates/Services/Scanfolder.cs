@@ -20,19 +20,26 @@ namespace Checking_duplicates.Services
         /// <param name="folderPath">Путь к папке для сканирования.</param>
         public void ScanFolder(string folderPath)
         {
-            if (Directory.Exists(folderPath))
+            try
             {
-                int imageCount = 0;
-                imageFiles.Clear(); // Очищаем список перед добавлением новых файлов, если это необходимо.
-
-                string[] patterns = { "*.jpg", "*.jpeg", "*.png", "*.bmp", "*.gif" }; // Массив шаблонов расширений файлов.
-                foreach (string pattern in patterns) // Добавляем файлы по каждому шаблону в список.
+                if (Directory.Exists(folderPath))
                 {
-                    imageFiles.AddRange(Directory.GetFiles(folderPath, pattern, SearchOption.TopDirectoryOnly));
+                    int imageCount = 0;
+                    imageFiles.Clear(); // Очищаем список перед добавлением новых файлов, если это необходимо.
+
+                    string[] patterns = { "*.jpg", "*.jpeg", "*.png", "*.bmp", "*.gif" }; // Массив шаблонов расширений файлов.
+                    foreach (string pattern in patterns) // Добавляем файлы по каждому шаблону в список.
+                    {
+                        imageFiles.AddRange(Directory.GetFiles(folderPath, pattern, SearchOption.TopDirectoryOnly));
+                    }
+                    imageCount = imageFiles.Count;
+                    Console.WriteLine("Файлов всего {0} ", imageCount);
+                    FolderPath = folderPath;
                 }
-                imageCount = imageFiles.Count;
-                Console.WriteLine("Файлов всего {0} ", imageCount);
-                FolderPath = folderPath;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка при сканировании папки: {ex.Message}");
             }
         }
 
@@ -41,94 +48,101 @@ namespace Checking_duplicates.Services
         /// </summary>
         public void CompareImages()
         {
-            /// <summary>
-            /// Изображения группируются по хэшу в словаре imageGroups. 
-            /// Если у нескольких изображений одинаковый хэш, они добавляются в один список.
-            /// </summary>
-            Dictionary<string, List<string>> imageGroups = new Dictionary<string, List<string>>();
-            List<string> confirmedDuplicates = new List<string>();// Список, подтвержденных дубликатов.
-            HashSet<string> movedFiles = new HashSet<string>();
-
-            string destinationFolderPath = Path.Combine(FolderPath, "Duplicates");
-            // Проверяет папку, если нет - создает ее.
-            if (!Directory.Exists(destinationFolderPath))
+            try
             {
-                Directory.CreateDirectory(destinationFolderPath);
-            }
+                /// <summary>
+                /// Изображения группируются по хэшу в словаре imageGroups. 
+                /// Если у нескольких изображений одинаковый хэш, они добавляются в один список.
+                /// </summary>
+                Dictionary<string, List<string>> imageGroups = new Dictionary<string, List<string>>();
+                List<string> confirmedDuplicates = new List<string>();// Список, подтвержденных дубликатов.
+                HashSet<string> movedFiles = new HashSet<string>();
 
-            // Хеширование всех изображений и группировка по хешу.
-            foreach (string imagePath in imageFiles)
-            {
-                string hash = ComputeHash(imagePath);
-                if (!imageGroups.ContainsKey(hash))
+                string destinationFolderPath = Path.Combine(FolderPath, "Duplicates");
+                // Проверяет папку, если нет - создает ее.
+                if (!Directory.Exists(destinationFolderPath))
                 {
-                    imageGroups[hash] = new List<string>();
+                    Directory.CreateDirectory(destinationFolderPath);
                 }
-                imageGroups[hash].Add(imagePath);
-            }
 
-            // Сравнение потенциальных дубликатов с использованием GroupDocs.Comparison.
-            foreach (var group in imageGroups)
-            {
-                if (group.Value.Count > 1)
+                // Хеширование всех изображений и группировка по хешу.
+                foreach (string imagePath in imageFiles)
                 {
-                    for (int i = 0; i < group.Value.Count; i++)
+                    string hash = ComputeHash(imagePath);
+                    if (!imageGroups.ContainsKey(hash))
                     {
-                        for (int j = i + 1; j < group.Value.Count; j++)
-                        {
-                            string path1 = group.Value[i];
-                            string path2 = group.Value[j];
-                            try
-                            {
-                                using (Comparer comparer = new Comparer(path1))
-                                {
-                                    comparer.Add(path2);
-                                    CompareOptions options = new CompareOptions();
-                                    var result = comparer.Compare(options);
+                        imageGroups[hash] = new List<string>();
+                    }
+                    imageGroups[hash].Add(imagePath);
+                }
 
-                                    if (result.Changes.Count == 0)
+                // Сравнение потенциальных дубликатов с использованием GroupDocs.Comparison.
+                foreach (var group in imageGroups)
+                {
+                    if (group.Value.Count > 1)
+                    {
+                        for (int i = 0; i < group.Value.Count; i++)
+                        {
+                            for (int j = i + 1; j < group.Value.Count; j++)
+                            {
+                                string path1 = group.Value[i];
+                                string path2 = group.Value[j];
+                                try
+                                {
+                                    using (Comparer comparer = new Comparer(path1))
                                     {
-                                        Console.WriteLine($"Изображения одинаковые: {path1} и {path2}");
-                                        if (!confirmedDuplicates.Contains(path1))
+                                        comparer.Add(path2);
+                                        CompareOptions options = new CompareOptions();
+                                        var result = comparer.Compare(options);
+
+                                        if (result.Changes.Count == 0)
                                         {
-                                            confirmedDuplicates.Add(path1);
+                                            Console.WriteLine($"Изображения одинаковые: {path1} и {path2}");
+                                            if (!confirmedDuplicates.Contains(path1))
+                                            {
+                                                confirmedDuplicates.Add(path1);
+                                            }
+                                            if (!confirmedDuplicates.Contains(path2))
+                                            {
+                                                confirmedDuplicates.Add(path2);
+                                            }
                                         }
-                                        if (!confirmedDuplicates.Contains(path2))
+                                        else
                                         {
-                                            confirmedDuplicates.Add(path2);
+                                            Console.WriteLine("Изображения разные.");
                                         }
-                                    }
-                                    else
-                                    {
-                                        Console.WriteLine("Изображения разные.");
                                     }
                                 }
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine("Произошла ошибка при сравнении изображений: " + ex.Message);
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine("Произошла ошибка при сравнении изображений: " + ex.Message);
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            /// <summary>
-            /// Все подтвержденные дубликаты перемещаются в папку Duplicates 
-            /// с уникальными именами, чтобы избежать конфликта имен.
-            /// </summary>
-            foreach (var filePath in confirmedDuplicates)
-            {
-                if (!movedFiles.Contains(filePath))
+                /// <summary>
+                /// Все подтвержденные дубликаты перемещаются в папку Duplicates 
+                /// с уникальными именами, чтобы избежать конфликта имен.
+                /// </summary>
+                foreach (var filePath in confirmedDuplicates)
                 {
-                    string uniqueFileName = Guid.NewGuid().ToString() + Path.GetExtension(filePath);
-                    string destinationFilePath = Path.Combine(destinationFolderPath, uniqueFileName);
-                    File.Move(filePath, destinationFilePath);
-                    movedFiles.Add(filePath);
+                    if (!movedFiles.Contains(filePath))
+                    {
+                        string uniqueFileName = Guid.NewGuid().ToString() + Path.GetExtension(filePath);
+                        string destinationFilePath = Path.Combine(destinationFolderPath, uniqueFileName);
+                        File.Move(filePath, destinationFilePath);
+                        movedFiles.Add(filePath);
+                    }
                 }
-            }
 
-            Console.WriteLine("Всего дубликатов: {0}", confirmedDuplicates.Count);
+                Console.WriteLine("Всего дубликатов: {0}", confirmedDuplicates.Count);
+            }
+            catch (Exception ex) 
+            {
+                Console.WriteLine($"Ошибка при сравнении изображений: {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -138,13 +152,21 @@ namespace Checking_duplicates.Services
         /// <returns>Строка, представляющая хеш изображения.</returns>
         private string ComputeHash(string filePath)
         {
-            using (var sha256 = SHA256.Create())
+            try
             {
-                using (var stream = File.OpenRead(filePath))
+                using (var sha256 = SHA256.Create())
                 {
-                    byte[] hashBytes = sha256.ComputeHash(stream);
-                    return BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+                    using (var stream = File.OpenRead(filePath))
+                    {
+                        byte[] hashBytes = sha256.ComputeHash(stream);
+                        return BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+                    }
                 }
+            }
+            catch (Exception ex) 
+            {
+                Console.WriteLine($"Ошибка при вычислении хеша: {ex.Message}");
+                return string.Empty;
             }
         }
     }
