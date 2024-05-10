@@ -12,7 +12,7 @@ namespace Checking_duplicates
             {
                 Console.WriteLine("**** Поиск дубликатов ****");
                 Console.WriteLine("Укажите путь к папке:");
-                string folderPath = Console.ReadLine();
+                string? folderPath = Console.ReadLine();
                 if (string.IsNullOrEmpty(folderPath) || !Directory.Exists(folderPath))
                 {
                     Console.WriteLine("Указанный путь не существует или пустой.");
